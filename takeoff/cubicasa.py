@@ -21,20 +21,27 @@ def _total_size():
 
 
 def download():
-    """Fetch the archive, resuming if a partial download is already on disk."""
+    """Fetch the archive, resuming until every byte is on disk.
+
+    Zenodo drops the connection long before a 5.5 GB transfer finishes, and the
+    read just returns empty rather than raising, so a single pass looks like a
+    clean finish at whatever point it died. Reconnect with a Range header until
+    the file on disk actually matches the advertised size.
+    """
     DATA.mkdir(exist_ok=True)
     total = _total_size()
     done = ARCHIVE.stat().st_size if ARCHIVE.exists() else 0
-    if done >= total:
-        print(f"already downloaded: {ARCHIVE}")
-        return
 
-    request = urllib.request.Request(URL, headers={"Range": f"bytes={done}-"})
-    with urllib.request.urlopen(request) as response, open(ARCHIVE, "ab") as f:
-        while chunk := response.read(1 << 20):
-            f.write(chunk)
-            done += len(chunk)
-            print(f"\r{done / 1e9:.2f} / {total / 1e9:.2f} GB", end="", flush=True)
+    while done < total:
+        request = urllib.request.Request(URL, headers={"Range": f"bytes={done}-"})
+        with urllib.request.urlopen(request) as response, open(ARCHIVE, "ab") as f:
+            while chunk := response.read(1 << 20):
+                f.write(chunk)
+                done += len(chunk)
+                print(f"\r{done / 1e9:.2f} / {total / 1e9:.2f} GB", end="", flush=True)
+        if done < total:
+            print(f"\nconnection dropped at {done / 1e9:.2f} GB, resuming")
+
     print(f"\nsaved to {ARCHIVE}")
 
 
