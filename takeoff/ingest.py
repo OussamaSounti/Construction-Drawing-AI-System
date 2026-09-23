@@ -57,12 +57,28 @@ def clean(text):
     return " ".join(unicodedata.normalize("NFKD", text).split()).upper()
 
 
-def text_spans(page):
-    """Every text span as (font size, text, x, y), largest first.
+@dataclass
+class Span:
+    """A run of text, with its box as a fraction of the page."""
 
-    x and y are the span's centre as a fraction of the page, so callers can ask
-    where on the sheet the text sits without carrying the page around.
-    """
+    size: float
+    text: str
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+
+    @property
+    def x(self):
+        return (self.x0 + self.x1) / 2
+
+    @property
+    def y(self):
+        return (self.y0 + self.y1) / 2
+
+
+def text_spans(page):
+    """Every text span on the page, largest type first."""
     width, height = page.rect.width, page.rect.height
     spans = []
     for block in page.get_text("dict")["blocks"]:
@@ -70,23 +86,43 @@ def text_spans(page):
             for span in line["spans"]:
                 if span["text"].strip():
                     x0, y0, x1, y1 = span["bbox"]
-                    spans.append((span["size"], clean(span["text"]),
-                                  (x0 + x1) / 2 / width, (y0 + y1) / 2 / height))
-    return sorted(spans, key=lambda s: -s[0])
+                    spans.append(Span(span["size"], clean(span["text"]),
+                                      x0 / width, y0 / height, x1 / width, y1 / height))
+    return sorted(spans, key=lambda s: -s.size)
 
 
 def classify(spans):
     """Guess the sheet number and what kind of drawing the page holds."""
     sheet = next(
-        (text for _, text, x, y in spans
-         if SHEET_NUMBER.match(text) and (x > TITLE_BLOCK or y > TITLE_BLOCK)),
+        (s.text for s in spans
+         if SHEET_NUMBER.match(s.text) and (s.x > TITLE_BLOCK or s.y > TITLE_BLOCK)),
         None,
     )
-    for _, text, _, _ in spans:
+    for span in spans:
         for label, keywords in TITLES:
-            if any(k in text for k in keywords):
+            if any(k in span.text for k in keywords):
                 return label, sheet
     return None, sheet
+
+
+def title_block(spans, min_corridor=0.03):
+    """Find the title block strip: the band of text at the right edge holding
+    the sheet number, cut off from the drawing by a text-free corridor.
+
+    Returns the strip's left edge as a fraction of the page width, or None when
+    no corridor is visible. Densely packed sheets often have none -- their text
+    runs right up to the title block -- so callers must handle None.
+    """
+    sheet = next((s for s in spans if SHEET_NUMBER.match(s.text) and (s.x > TITLE_BLOCK or s.y > TITLE_BLOCK)), None)
+    if sheet is None:
+        return None
+
+    covered = [(s.x0, s.x1) for s in spans if s.x1 < sheet.x0]
+    edge = 0.0
+    for x0, x1 in sorted(covered, reverse=True):
+        if sheet.x0 - x1 >= min_corridor and x1 > edge:
+            edge = x1
+    return edge or None
 
 
 @dataclass
