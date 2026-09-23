@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" height="200" width="300" viewBox="0 0 300 200">
+  <g class="Model v1-1">
+    <g class="Space Bath">
+      <polygon points="0,0 100,0 100,80 0,80 "/>
+      <g transform="matrix(1,0,0,1,10,10)" class="Dimension">
+        <g class="DimensionMark"><polygon points="-5,5,0,0,5,5"/></g>
+      </g>
+    </g>
+    <g class="Wall External">
+      <polygon points="0,80 300,80 300,100 0,100 "/>
+      <g class="Window Regular">
+        <polygon points="40,80 90,80 90,100 40,100 "/>
+        <g class="Glass"><polygon points="40,80 90,80 90,100 40,100 "/></g>
+      </g>
+      <g class="Door Swing Beside">
+        <polygon points="150,80 200,80 200,100 150,100 "/>
+        <g class="Threshold"><polygon points="150,80 200,80 200,100 150,100 "/></g>
+      </g>
+    </g>
+  </g>
+</svg>

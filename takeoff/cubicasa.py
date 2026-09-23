@@ -3,11 +3,13 @@
 import hashlib
 import sys
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from zipfile import ZipFile
 
 from lxml import etree
+from PIL import Image, ImageDraw
 
 URL = "https://zenodo.org/api/records/2613548/files/cubicasa5k.zip/content"
 MD5 = "0ce0b203d1e3c125b51087b219bd23b9"
@@ -129,6 +131,41 @@ def iter_samples(split="train"):
         yield load_sample(ROOT / line.strip("/"))
 
 
+COLORS = {"Wall": (255, 0, 0), "Door": (0, 160, 0), "Window": (0, 80, 255), "Room": (255, 140, 0)}
+
+
+def preview(sample, path):
+    """Draw a sample's annotations over its floor plan, to eyeball alignment."""
+    image = Image.open(sample.image).convert("RGB")
+    draw = ImageDraw.Draw(image)
+    for element in sample.elements:
+        draw.polygon(element.points, outline=COLORS[element.kind], width=4)
+    image.thumbnail((1400, 1400))
+    image.save(path)
+
+
+def stats(split="train"):
+    """Count annotations across a split and write a few preview overlays."""
+    counts = Counter()
+    rooms = Counter()
+    total = 0
+    previews = DATA / "previews"
+    previews.mkdir(exist_ok=True)
+
+    for sample in iter_samples(split):
+        total += 1
+        counts.update(e.kind for e in sample.elements)
+        rooms.update(e.subtype for e in sample.of("Room"))
+        if total <= 3:
+            preview(sample, previews / f"{split}_{sample.folder.name}.png")
+
+    print(f"{split}: {total} samples")
+    for kind, n in counts.most_common():
+        print(f"  {kind:7} {n:7}  ({n / total:.1f} per plan)")
+    print("  top rooms:", ", ".join(f"{r}={n}" for r, n in rooms.most_common(8)))
+    print(f"  previews written to {previews}")
+
+
 if __name__ == "__main__":
     command = sys.argv[1] if len(sys.argv) > 1 else "download"
-    {"download": download, "verify": verify, "extract": extract}[command]()
+    {"download": download, "verify": verify, "extract": extract, "stats": stats}[command](*sys.argv[2:])
